@@ -1,39 +1,57 @@
 package main
 
-type T struct {
+import (
+	"github.com/huangw1/rpc-demo/step-3/server"
+	"time"
+	"github.com/huangw1/rpc-demo/step-3/client"
+	"math/rand"
+	"context"
+	"log"
+	"fmt"
+)
+
+type Test struct {
+}
+
+type Arg struct {
 	A int
-	B string
+	B int
+}
+
+type Reply struct {
+	C int
+}
+
+func (t Test) Add(ctx context.Context,arg Arg, reply *Reply) error {
+	reply.C = arg.A + arg.B
+	return nil
 }
 
 func main() {
-	// context scene
-	//ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	//defer cancel()
-	//
-	//select {
-	//case <-time.After(1 * time.Second):
-	//	fmt.Println("time.After")
-	//case <-ctx.Done():
-	//	fmt.Println(ctx.Err())
-	//}
+	s := server.NewSimpleServer(server.DefaultOption)
+	err := s.Register(Test{}, make(map[string]string))
+	if err != nil {
+		panic(err)
+	}
+	go func() {
+		err := s.Serve("tcp", ":7000")
+		if err != nil {
+			panic(err)
+		}
+	}()
 
-	// reflect scene
-	//t := T{2019, "go"}
-	//tt := reflect.TypeOf(t)
-	//ttt := reflect.ValueOf(t)
-	//fmt.Printf("tt name: %v\n", tt.Name())
-	//fmt.Printf("ttt value: %v\n", ttt)
-	//fmt.Printf("tt type: %v\n", tt)
-	//ttp := reflect.TypeOf(&t)
-	//fmt.Printf("ttp type: %v\n", ttp)
-	//// 要设置t的值，需要传入t的地址，而不是t的拷贝。
-	//// reflect.ValueOf(&t)只是一个地址的值，不是settable, 通过.Elem()解引用获取t本身的reflect.Value
-	//s := reflect.ValueOf(&t).Elem()
-	//typeOfT := s.Type()
-	//for i := 0; i < s.NumField(); i++ {
-	//	f := s.Field(i)
-	//	fmt.Printf("%d: %s %s = %v\n", i,
-	//		typeOfT.Field(i).Name, f.Type(), f.Interface())
-	//}
+	time.Sleep(time.Second * 2)
 
+	c, err := client.NewSimpleClient("tcp", ":7000", client.DefaultOption)
+	if err != nil {
+		panic(err)
+	}
+	arg := Arg{A: rand.Intn(200), B: rand.Intn(100)}
+	reply := &Reply{}
+	err = c.Call(context.TODO(), "Test.Add", arg, &reply)
+	if err != nil {
+		log.Fatal(err)
+	} else {
+		fmt.Printf("Test.Add with param %v equal %v", arg, reply)
+	}
 }

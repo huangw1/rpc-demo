@@ -13,8 +13,8 @@ import (
 	"time"
 )
 
-var ErrorShutdown = errors.New("client is shut down")
-var ErrorTimeout = errors.New("request timeout")
+var ErrorShutdown = errors.New("rpc-client: client is shut down")
+var ErrorTimeout = errors.New("rpc-client: request timeout")
 
 type RPCClient interface {
 	Go(ctx context.Context, serviceName string, arg interface{}, reply interface{}, done chan *Call) *Call
@@ -41,7 +41,7 @@ type simpleClient struct {
 	mutex        sync.Mutex
 	shutdown     bool
 	option       Option
-	seq          int64
+	seq          uint64
 }
 
 func NewSimpleClient(network, addr string, option Option) (RPCClient, error) {
@@ -65,7 +65,7 @@ func (c *simpleClient) Go(ctx context.Context, serviceName string, arg interface
 	if done == nil {
 		done = make(chan *Call, 10)
 	} else if cap(done) == 0 {
-		panic("rpc: done channel is unbuffered")
+		panic("rpc-client: done channel is unbuffered")
 	}
 	call.Done = done
 	c.send(ctx, call)
@@ -81,6 +81,7 @@ func (c *simpleClient) send(ctx context.Context, call *Call) {
 	req.MethodName = serviceMethod[1]
 	req.SerializeType = c.option.SerializeType
 	req.CompressType = c.option.CompressType
+	req.MessageType = protocol.MessageTypeReq
 	req.Seq = seq
 	if ctx.Value(protocol.MetaDataKey) != nil {
 		req.MetaData = ctx.Value(protocol.MetaDataKey).(map[string]string)
@@ -106,7 +107,7 @@ func (c *simpleClient) send(ctx context.Context, call *Call) {
 }
 
 func (c *simpleClient) Call(ctx context.Context, serviceName string, arg interface{}, reply interface{}) error {
-	seq := atomic.AddInt64(&c.seq, 1)
+	seq := atomic.AddUint64(&c.seq, 1)
 	ctx = context.WithValue(ctx, protocol.RequestSeqKey, seq)
 	cancelFunc := func() {}
 	if c.option.RequestTimeout != time.Duration(0) {
@@ -121,7 +122,7 @@ func (c *simpleClient) Call(ctx context.Context, serviceName string, arg interfa
 		meta[protocol.MetaDataKey] = c.option.RequestTimeout.String()
 		ctx = context.WithValue(ctx, protocol.MetaDataKey, meta)
 	}
-	done := make(chan *Call)
+	done := make(chan *Call, 1)
 	call := c.Go(ctx, serviceName, arg, reply, done)
 	select {
 	case <-ctx.Done():
@@ -172,7 +173,7 @@ func (c *simpleClient) input() {
 		} else {
 			err = c.codec.Decode(res.Data, call.Reply)
 			if err != nil {
-				call.Error = errors.New("reading body " + err.Error())
+				call.Error = errors.New("rpc-client: reading body " + err.Error())
 			}
 			call.done()
 		}

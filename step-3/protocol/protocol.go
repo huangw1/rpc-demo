@@ -104,11 +104,11 @@ func (RPCProtocol) NewMessage() *Message {
 
 func (RPCProtocol) DecodeMessage(r io.Reader) (msg *Message, err error) {
 	firstBytes := make([]byte, 3)
-	_, err = io.ReadFull(r, firstBytes[:2])
+	_, err = io.ReadFull(r, firstBytes)
 	if err != nil {
 		return
 	}
-	if !checkMagic(firstBytes) {
+	if !checkMagic(firstBytes[:2]) {
 		err = errors.New("wrong protocol")
 		return
 	}
@@ -158,7 +158,7 @@ func (RPCProtocol) EncodeMessage(m *Message) []byte {
 	copyBytesOffset(data, headerLenBytes, &start)
 	copyBytesOffset(data, headBytes, &start)
 	copyBytesOffset(data, m.Data, &start)
-	return nil
+	return data
 }
 
 func checkMagic(bytes []byte) bool {
@@ -166,6 +166,6 @@ func checkMagic(bytes []byte) bool {
 }
 
 func copyBytesOffset(dst []byte, src []byte, start *int) {
-	copy(dst[*start:len(src)], src)
+	copy(dst[*start:*start+len(src)], src)
 	*start += len(src)
 }
